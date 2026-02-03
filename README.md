@@ -23,6 +23,6 @@ python hospital_rota_app.py
 
 ## Screenshots
 
-![Main window](screenshot-1.png)
-![Cannot-work popup](screenshot-2.png)
-![Rota result](screenshot-3.png)
+![Main window](Screenshot_1.png)
+![Prefer-days popup](Screenshot_2.png)
+![Rota result](Screenshot_3.png)
