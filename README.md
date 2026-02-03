@@ -20,3 +20,9 @@ Python desktop app for scheduling 12-hour hospital shifts (day/night) with hard 
 ```bash
 pip install -r requirements.txt
 python hospital_rota_app.py
+
+## Screenshots
+
+![Main window](screenshot-1.png)
+![Cannot-work popup](screenshot-2.png)
+![Rota result](screenshot-3.png)
