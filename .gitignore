@@ -1,0 +1,31 @@
+# Python junk that Git should never upload
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+downloads/
+eggs/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Editor / IDE folders (you don't want to share your personal settings)
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Virtual environments (if you start using them later)
+venv/
+env/
+.venv/
+
+# macOS junk (if you're on Mac)
+.DS_Store
+
+# Windows junk
+Thumbs.db
+ehthumbs.db
