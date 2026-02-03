@@ -16,13 +16,13 @@ Python desktop app for scheduling 12-hour hospital shifts (day/night) with hard 
 - Soft rules + point system (PuLP)
 - Save/Load entire rota configuration
 
-## How to run
-```bash
-pip install -r requirements.txt
-python hospital_rota_app.py
-
 ## Screenshots
 
 ![Main window](Screenshot_1.png)
 ![Prefer-days popup](Screenshot_2.png)
 ![Rota result](Screenshot_3.png)
+
+## How to run
+```bash
+pip install -r requirements.txt
+python hospital_rota_app.py
