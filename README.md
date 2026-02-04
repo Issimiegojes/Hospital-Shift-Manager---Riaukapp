@@ -1,4 +1,4 @@
-# Hospital Rota App
+# Hospital Shift Manager "Riaukapp"
 
 Python desktop app for scheduling 12-hour hospital shifts (day/night) with hard constraints, soft preferences, and a point system to find the best possible rota.
 
