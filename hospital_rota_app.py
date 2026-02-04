@@ -727,6 +727,14 @@ def delete_row(row_num):
             if shift["assigned_worker"] == worker_name:
                 shift["assigned_worker"] = None
 
+    # Clean up the dictionaries when deleting
+    if row_num in selected_cannot_days:
+        del selected_cannot_days[row_num]
+    if row_num in selected_prefer_days:
+        del selected_prefer_days[row_num]
+    if row_num in selected_manual_days:
+        del selected_manual_days[row_num]
+
     # Find and destroy all widgets in this row
     for row_widgets in worker_rows:
         if row_widgets['row_num'] == row_num:
@@ -792,15 +800,29 @@ def save_preferences():
         return
     file_path = filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("JSON files", "*.json"), ("All files", "*.*")])
     if file_path:
+        # Clean up the dictionaries before saving
+        # Get a set of row numbers that actually have saved workers
+        saved_row_numbers = set()  # Like a basket to collect valid table numbers
+        for worker in workers_list:  # Loop through all saved workers
+            saved_row_numbers.add(worker["worker_row_number"])  # Add their table number
+        
+        # Filter the dictionaries to only keep entries for saved workers
+        # This is like throwing away notes from empty tables
+        cleaned_cannot = {row_num: days for row_num, days in selected_cannot_days.items() if row_num in saved_row_numbers}
+        cleaned_prefer = {row_num: days for row_num, days in selected_prefer_days.items() if row_num in saved_row_numbers}
+        cleaned_manual = {row_num: days for row_num, days in selected_manual_days.items() if row_num in saved_row_numbers}
+        
+        # Build the data to save (using cleaned versions)
         data = {"year": year}
         if month is not None:
             data["month"] = month
         data["holiday_days"] = holiday_days
         data["shifts_list"] = shifts_list
         data["workers_list"] = workers_list
-        data["selected_cannot_days"] = selected_cannot_days
-        data["selected_prefer_days"] = selected_prefer_days
-        data["selected_manual_days"] = selected_manual_days
+        data["selected_cannot_days"] = cleaned_cannot  # Use cleaned version
+        data["selected_prefer_days"] = cleaned_prefer  # Use cleaned version
+        data["selected_manual_days"] = cleaned_manual  # Use cleaned version
+        
         with open(file_path, 'w') as f:
             json.dump(data, f)
         error_label.config(text="Preferences saved.")
@@ -1057,7 +1079,7 @@ def create_rota():
                     prob += assign_vars[w][f] <= 0  # Must be 0 (no assign).
 
 
-       # Make the map to CBC.exe – like telling PuLP where the tool is. IMPORTANT: TURN THIS OFF if app running on PC without CBC.exe
+       # Make the map to CBC.exe – like telling PuLP where the tool is.
         if hasattr(sys, '_MEIPASS'):  # Check if we're in .exe mode (a special box PyInstaller adds)
             cbc_path = os.path.join(sys._MEIPASS, 'cbc.exe')  # Glue temp spot + file name
         else:  # Normal .py mode
@@ -1067,8 +1089,8 @@ def create_rota():
         # Solve with messages and time limit.
         print("Starting PuLP solve – time limit 60 seconds...")
         # Solve the problem
-        status = prob.solve(pulp.COIN_CMD(msg=1, timeLimit=60, path=cbc_path))
-#       status = prob.solve(pulp.PULP_CBC_CMD(msg=1, timeLimit=60)) - # TURN THIS ON if app running on PC without CBC.exe
+#        status = prob.solve(pulp.COIN_CMD(msg=1, timeLimit=60, path=cbc_path)) # TURN THIS ON if app running on PC with CBC.exe, and file is .exe
+        status = prob.solve(pulp.PULP_CBC_CMD(msg=1, timeLimit=60)) # TURN THIS ON if app running on PC without CBC.exe, and file is .py
         # Check the result
         if pulp.LpStatus[status] == "Infeasible":
             # STOP! The rules are impossible to satisfy
