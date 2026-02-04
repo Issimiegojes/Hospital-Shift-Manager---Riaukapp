@@ -1057,7 +1057,7 @@ def create_rota():
                     prob += assign_vars[w][f] <= 0  # Must be 0 (no assign).
 
 
-        # Make the map to CBC.exe – like telling PuLP where the tool is
+       # Make the map to CBC.exe – like telling PuLP where the tool is. IMPORTANT: TURN THIS OFF if app running on PC without CBC.exe
         if hasattr(sys, '_MEIPASS'):  # Check if we're in .exe mode (a special box PyInstaller adds)
             cbc_path = os.path.join(sys._MEIPASS, 'cbc.exe')  # Glue temp spot + file name
         else:  # Normal .py mode
@@ -1066,14 +1066,23 @@ def create_rota():
 
         # Solve with messages and time limit.
         print("Starting PuLP solve – time limit 60 seconds...")
-        status = prob.solve(pulp.COIN_CMD(msg=1, timeLimit=60, path=cbc_path))  # msg=1 shows progress, timeLimit=60 seconds.
-        #status = prob.solve(pulp.PULP_CBC_CMD(msg=1, timeLimit=60))if cbc_path not defined
-        if pulp.LpStatus[status] == "Optimal":
+        # Solve the problem
+        status = prob.solve(pulp.COIN_CMD(msg=1, timeLimit=60, path=cbc_path))
+#       status = prob.solve(pulp.PULP_CBC_CMD(msg=1, timeLimit=60)) - # TURN THIS ON if app running on PC without CBC.exe
+        # Check the result
+        if pulp.LpStatus[status] == "Infeasible":
+            # STOP! The rules are impossible to satisfy
+            error_label.config(text="ERROR: Impossible to create rota with current rules! Check shift ranges, max weekends, max 24hr shifts.")
+            print("INFEASIBLE: Cannot create a valid rota with these constraints.")
+            return  # STOP HERE - don't continue
+        elif pulp.LpStatus[status] == "Optimal":
             print("Found best solution in time!")
         elif pulp.LpStatus[status] == "Not Solved":
             print("Timed out – showing best found so far.")
         else:
             print("Other issue:", pulp.LpStatus[status])
+            error_label.config(text=f"Solver issue: {pulp.LpStatus[status]}")
+            return  # Stop if something unexpected happened
 
         print(f"Solve finished! Status: {pulp.LpStatus[status]}")  # Shows if it worked (e.g., "Optimal")
 
