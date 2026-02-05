@@ -153,25 +153,68 @@ def show_cannot_popup(row_num):
     
     day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     check_vars = []
+    
+    # Create separate lists to hold ONLY day shift variables and ONLY night shift variables
+    day_shift_vars = []  # Empty basket for day shift checkboxes
+    night_shift_vars = []  # Empty basket for night shift checkboxes
+    
     for i, day in enumerate(days_list, start=1):
         weekday = (starting_weekday + (day - 1)) % 7
         day_name = day_names[weekday]
         Label(scrollable_frame, text=str(day)).grid(row=i, column=0)
         Label(scrollable_frame, text=day_name).grid(row=i, column=1)
+        
         # Day shift checkbox
         day_var = IntVar()
         Checkbutton(scrollable_frame, variable=day_var).grid(row=i, column=2)
         check_vars.append((f"Day {day}", day_var))
+        day_shift_vars.append(day_var)  # Add to day shift list
+        
         # Night shift checkbox
         night_var = IntVar()
         Checkbutton(scrollable_frame, variable=night_var).grid(row=i, column=3)
         check_vars.append((f"Night {day}", night_var))
+        night_shift_vars.append(night_var)  # Add to night shift list
 
     # Pre-select checkboxes based on existing selections for this row_num
     existing_selections = selected_cannot_days.get(row_num, [])
     for shift_name, var in check_vars:
         if shift_name in existing_selections:
             var.set(1)
+
+    # Calculate the row number for "Check All" row
+    # It should be after all the days, so: len(days_list) + 1
+    check_all_row = len(days_list) + 1
+    
+    # Create the "Check All" label in column 1
+    Label(scrollable_frame, text="Check All").grid(row=check_all_row, column=1, sticky="w")
+    
+    # Create master checkbox variables for day and night
+    master_day_var = IntVar()  # Variable for "Check All Day Shifts"
+    master_night_var = IntVar()  # Variable for "Check All Night Shifts"
+    
+    # Function that runs when "Check All Day Shifts" is clicked
+    def toggle_all_day_shifts():
+        # Get the value: 1 if checked, 0 if unchecked
+        value = master_day_var.get()
+        # Loop through ALL day shift checkboxes and set them to the same value
+        for day_var in day_shift_vars:
+            day_var.set(value)  # Set each one to 1 (checked) or 0 (unchecked)
+    
+    # Function that runs when "Check All Night Shifts" is clicked
+    def toggle_all_night_shifts():
+        # Get the value: 1 if checked, 0 if unchecked
+        value = master_night_var.get()
+        # Loop through ALL night shift checkboxes and set them to the same value
+        for night_var in night_shift_vars:
+            night_var.set(value)  # Set each one to 1 (checked) or 0 (unchecked)
+    
+    # Create the "Check All" checkboxes with the command parameter
+    # command= tells the checkbox what function to run when clicked
+    Checkbutton(scrollable_frame, variable=master_day_var, 
+                command=toggle_all_day_shifts).grid(row=check_all_row, column=2)
+    Checkbutton(scrollable_frame, variable=master_night_var, 
+                command=toggle_all_night_shifts).grid(row=check_all_row, column=3)
 
     def save_selection():
         global selected_cannot_days
@@ -189,8 +232,10 @@ def show_cannot_popup(row_num):
             error_label.config(text="")
         popup.destroy()
 
-    Button(scrollable_frame, text="Save Selection", command=save_selection).grid(row=len(days_list)+1, column=0, columnspan=4)
-
+    # Update the "Save Selection" button row to be AFTER the "Check All" row
+    Button(scrollable_frame, text="Save Selection", 
+           command=save_selection).grid(row=check_all_row + 1, column=0, columnspan=4)
+    
 def show_prefer_popup(row_num):
     global selected_prefer_days
     popup = Toplevel(root)
@@ -221,27 +266,71 @@ def show_prefer_popup(row_num):
     Label(scrollable_frame, text="Weekday").grid(row=0, column=1)
     Label(scrollable_frame, text="Day Shift").grid(row=0, column=2)
     Label(scrollable_frame, text="Night Shift").grid(row=0, column=3)
+
     day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     check_vars = []
+
+    # Create separate lists to hold ONLY day shift variables and ONLY night shift variables
+    day_shift_vars = []  # Empty basket for day shift checkboxes
+    night_shift_vars = []  # Empty basket for night shift checkboxes
+
     for i, day in enumerate(days_list, start=1):
         weekday = (starting_weekday + (day - 1)) % 7
         day_name = day_names[weekday]
         Label(scrollable_frame, text=str(day)).grid(row=i, column=0)
         Label(scrollable_frame, text=day_name).grid(row=i, column=1)
+        
         # Day shift checkbox
         day_var = IntVar()
         Checkbutton(scrollable_frame, variable=day_var).grid(row=i, column=2)
         check_vars.append((f"Day {day}", day_var))
+        day_shift_vars.append(day_var)  # Add to day shift list
+        
         # Night shift checkbox
         night_var = IntVar()
         Checkbutton(scrollable_frame, variable=night_var).grid(row=i, column=3)
         check_vars.append((f"Night {day}", night_var))
+        night_shift_vars.append(night_var)  # Add to night shift list
 
     # Pre-select checkboxes based on existing selections for this row_num
     existing_selections = selected_prefer_days.get(row_num, [])
     for shift_name, var in check_vars:
         if shift_name in existing_selections:
             var.set(1)
+
+    # Calculate the row number for "Check All" row
+    # It should be after all the days, so: len(days_list) + 1
+    check_all_row = len(days_list) + 1
+    
+    # Create the "Check All" label in column 1
+    Label(scrollable_frame, text="Check All").grid(row=check_all_row, column=1, sticky="w")
+    
+    # Create master checkbox variables for day and night
+    master_day_var = IntVar()  # Variable for "Check All Day Shifts"
+    master_night_var = IntVar()  # Variable for "Check All Night Shifts"
+    
+    # Function that runs when "Check All Day Shifts" is clicked
+    def toggle_all_day_shifts():
+        # Get the value: 1 if checked, 0 if unchecked
+        value = master_day_var.get()
+        # Loop through ALL day shift checkboxes and set them to the same value
+        for day_var in day_shift_vars:
+            day_var.set(value)  # Set each one to 1 (checked) or 0 (unchecked)
+    
+    # Function that runs when "Check All Night Shifts" is clicked
+    def toggle_all_night_shifts():
+        # Get the value: 1 if checked, 0 if unchecked
+        value = master_night_var.get()
+        # Loop through ALL night shift checkboxes and set them to the same value
+        for night_var in night_shift_vars:
+            night_var.set(value)  # Set each one to 1 (checked) or 0 (unchecked)
+    
+    # Create the "Check All" checkboxes with the command parameter
+    # command= tells the checkbox what function to run when clicked
+    Checkbutton(scrollable_frame, variable=master_day_var, 
+                command=toggle_all_day_shifts).grid(row=check_all_row, column=2)
+    Checkbutton(scrollable_frame, variable=master_night_var, 
+                command=toggle_all_night_shifts).grid(row=check_all_row, column=3)
 
     def save_selection():
         global selected_prefer_days
@@ -259,7 +348,7 @@ def show_prefer_popup(row_num):
             error_label.config(text="")
         popup.destroy()
 
-    Button(scrollable_frame, text="Save Selection", command=save_selection).grid(row=len(days_list)+1, column=0, columnspan=4)
+    Button(scrollable_frame, text="Save Selection", command=save_selection).grid(row=check_all_row + 1, column=0, columnspan=4)
 
 def show_manual_popup(row_num):
     global selected_manual_days
@@ -291,27 +380,71 @@ def show_manual_popup(row_num):
     Label(scrollable_frame, text="Weekday").grid(row=0, column=1)
     Label(scrollable_frame, text="Day Shift").grid(row=0, column=2)
     Label(scrollable_frame, text="Night Shift").grid(row=0, column=3)
+
     day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     check_vars = []
+
+    # Create separate lists to hold ONLY day shift variables and ONLY night shift variables
+    day_shift_vars = []  # Empty basket for day shift checkboxes
+    night_shift_vars = []  # Empty basket for night shift checkboxes
+
     for i, day in enumerate(days_list, start=1):
         weekday = (starting_weekday + (day - 1)) % 7
         day_name = day_names[weekday]
         Label(scrollable_frame, text=str(day)).grid(row=i, column=0)
         Label(scrollable_frame, text=day_name).grid(row=i, column=1)
+        
         # Day shift checkbox
         day_var = IntVar()
         Checkbutton(scrollable_frame, variable=day_var).grid(row=i, column=2)
         check_vars.append((f"Day {day}", day_var))
+        day_shift_vars.append(day_var)  # Add to day shift list
+        
         # Night shift checkbox
         night_var = IntVar()
         Checkbutton(scrollable_frame, variable=night_var).grid(row=i, column=3)
         check_vars.append((f"Night {day}", night_var))
+        night_shift_vars.append(night_var)  # Add to night shift list
 
     # Pre-select checkboxes based on existing selections for this row_num
     existing_selections = selected_manual_days.get(row_num, [])
     for shift_name, var in check_vars:
         if shift_name in existing_selections:
             var.set(1)
+
+    # Calculate the row number for "Check All" row
+    # It should be after all the days, so: len(days_list) + 1
+    check_all_row = len(days_list) + 1
+    
+    # Create the "Check All" label in column 1
+    Label(scrollable_frame, text="Check All").grid(row=check_all_row, column=1, sticky="w")
+    
+    # Create master checkbox variables for day and night
+    master_day_var = IntVar()  # Variable for "Check All Day Shifts"
+    master_night_var = IntVar()  # Variable for "Check All Night Shifts"
+    
+    # Function that runs when "Check All Day Shifts" is clicked
+    def toggle_all_day_shifts():
+        # Get the value: 1 if checked, 0 if unchecked
+        value = master_day_var.get()
+        # Loop through ALL day shift checkboxes and set them to the same value
+        for day_var in day_shift_vars:
+            day_var.set(value)  # Set each one to 1 (checked) or 0 (unchecked)
+    
+    # Function that runs when "Check All Night Shifts" is clicked
+    def toggle_all_night_shifts():
+        # Get the value: 1 if checked, 0 if unchecked
+        value = master_night_var.get()
+        # Loop through ALL night shift checkboxes and set them to the same value
+        for night_var in night_shift_vars:
+            night_var.set(value)  # Set each one to 1 (checked) or 0 (unchecked)
+    
+    # Create the "Check All" checkboxes with the command parameter
+    # command= tells the checkbox what function to run when clicked
+    Checkbutton(scrollable_frame, variable=master_day_var, 
+                command=toggle_all_day_shifts).grid(row=check_all_row, column=2)
+    Checkbutton(scrollable_frame, variable=master_night_var, 
+                command=toggle_all_night_shifts).grid(row=check_all_row, column=3)
 
     def save_selection():
         global selected_manual_days
@@ -329,7 +462,7 @@ def show_manual_popup(row_num):
             error_label.config(text="")
         popup.destroy()
 
-    Button(scrollable_frame, text="Save Selection", command=save_selection).grid(row=len(days_list)+1, column=0, columnspan=4)
+    Button(scrollable_frame, text="Save Selection", command=save_selection).grid(row=check_all_row + 1, column=0, columnspan=4)
 
 Label(root, text="Enter public holiday days, separated by comma (e.g., 24,25,26) or leave blank:").pack()  # Text label.
 
