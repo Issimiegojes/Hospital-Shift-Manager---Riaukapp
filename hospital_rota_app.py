@@ -224,7 +224,7 @@ def show_cannot_popup(row_num):
         for row_widgets in worker_rows:
             if row_widgets['row_num'] == row_num:
                 num = len(selected_shifts)
-                row_widgets['cannot_button'].config(text=f"Select Days ({num})" if num > 0 else "Select Days")
+                row_widgets['cannot_button'].config(text=f"Select ({num})" if num > 0 else "Select")
                 break
         if selected_shifts:
             error_label.config(text=f"Worker cannot work on these shifts: {', '.join(selected_shifts)}")
@@ -340,7 +340,7 @@ def show_prefer_popup(row_num):
         for row_widgets in worker_rows:
             if row_widgets['row_num'] == row_num:
                 num = len(selected_shifts)
-                row_widgets['prefer_button'].config(text=f"Select Days ({num})" if num > 0 else "Select Days")
+                row_widgets['prefer_button'].config(text=f"Select ({num})" if num > 0 else "Select")
                 break
         if selected_shifts:
             error_label.config(text=f"Worker prefers to work on these shifts: {', '.join(selected_shifts)}")
@@ -454,7 +454,7 @@ def show_manual_popup(row_num):
         for row_widgets in worker_rows:
             if row_widgets['row_num'] == row_num:
                 num = len(selected_shifts)
-                row_widgets['manual_button'].config(text=f"Select Manual ({num})" if num > 0 else "Select Manual")
+                row_widgets['manual_button'].config(text=f"Select ({num})" if num > 0 else "Select")
                 break
         if selected_shifts:
             error_label.config(text=f"Worker manually assigned to these shifts: {', '.join(selected_shifts)}")
@@ -614,7 +614,7 @@ Label(workers_frame, text="Max Wknds", width=10, padx=2, pady=2).grid(row=0, col
 Label(workers_frame, text="Max 24hr", width=10, padx=2, pady=2).grid(row=0, column=5, sticky="ew", padx=2, pady=2)
 Label(workers_frame, text="Manual Shifts", width=10, padx=2, pady=2).grid(row=0, column=6, sticky="ew", padx=2, pady=2)
 Label(workers_frame, text="Save", width=10, padx=2, pady=2).grid(row=0, column=7, sticky="ew", padx=2, pady=2)
-Label(workers_frame, text="Assign", width=10, padx=2, pady=2).grid(row=0, column=8, sticky="ew", padx=2, pady=2)
+Label(workers_frame, text="Assign Manual", width=10, padx=2, pady=2).grid(row=0, column=8, sticky="ew", padx=2, pady=2)
 Label(workers_frame, text="Delete", width=10, padx=2, pady=2).grid(row=0, column=9, sticky="ew", padx=2, pady=2)
 
 # List to hold worker rows (for delete).
@@ -634,11 +634,11 @@ def add_worker_row():  # Function for "Add Worker" button.
     range_entry.grid(row=row_num, column=1, sticky="ew", padx=2, pady=2)
 
     # Column 2: Cannot work button.
-    cannot_button = Button(workers_frame, text="Select Days", width=10, command=lambda: show_cannot_popup(row_num))
+    cannot_button = Button(workers_frame, text="Select", width=10, command=lambda: show_cannot_popup(row_num))
     cannot_button.grid(row=row_num, column=2, sticky="ew", padx=2, pady=2)
 
     # Column 3: Prefer button.
-    prefer_button = Button(workers_frame, text="Select Days", width=10, command=lambda: show_prefer_popup(row_num))
+    prefer_button = Button(workers_frame, text="Select", width=10, command=lambda: show_prefer_popup(row_num))
     prefer_button.grid(row=row_num, column=3, sticky="ew", padx=2, pady=2)
 
     # Column 4: Max weekends box.
@@ -650,7 +650,7 @@ def add_worker_row():  # Function for "Add Worker" button.
     max_24hr_entry.grid(row=row_num, column=5, sticky="ew", padx=2, pady=2)
 
     # Column 6: Manual shifts button.
-    manual_button = Button(workers_frame, text="Select Manual", width=10, command=lambda: show_manual_popup(row_num))
+    manual_button = Button(workers_frame, text="Select", width=10, command=lambda: show_manual_popup(row_num))
     manual_button.grid(row=row_num, column=6, sticky="ew", padx=2, pady=2)
 
     # Column 7: Save Worker button.
@@ -658,7 +658,7 @@ def add_worker_row():  # Function for "Add Worker" button.
     save_button.grid(row=row_num, column=7, sticky="ew", padx=2, pady=2)
 
     # Column 8: Manual save button.
-    manual_save_button = Button(workers_frame, text="Assign Manual", width=10, command=lambda: save_manual(row_num))
+    manual_save_button = Button(workers_frame, text="Assign", width=10, command=lambda: save_manual(row_num))
     manual_save_button.grid(row=row_num, column=8, sticky="ew", padx=2, pady=2)
 
     # Column 9: Delete button.
@@ -1064,15 +1064,6 @@ def load_preferences():
                 worker_row_number = max_row + 1
             else:
                 worker_row_number = 1
-            # Update button texts to show selections
-            for row_widgets in worker_rows:
-                row_num = row_widgets['row_num']
-                num_cannot = len(selected_cannot_days.get(row_num, []))
-                row_widgets['cannot_button'].config(text=f"Select Days ({num_cannot})" if num_cannot > 0 else "Select Days")
-                num_prefer = len(selected_prefer_days.get(row_num, []))
-                row_widgets['prefer_button'].config(text=f"Select Days ({num_prefer})" if num_prefer > 0 else "Select Days")
-                num_manual = len(selected_manual_days.get(row_num, []))
-                row_widgets['manual_button'].config(text=f"Select Manual ({num_manual})" if num_manual > 0 else "Select Manual")
         if "selected_cannot_days" in data:
             selected_cannot_days = {int(k): v for k, v in data["selected_cannot_days"].items()}
         if "selected_prefer_days" in data:
@@ -1087,6 +1078,15 @@ def load_preferences():
             if row_num not in selected_manual_days:
                 selected_manual_days[row_num] = []
         error_label.config(text="Preferences loaded.")
+        # Update button texts to show selections
+        for row_widgets in worker_rows:
+            row_num = row_widgets['row_num']
+            num_cannot = len(selected_cannot_days.get(row_num, []))
+            row_widgets['cannot_button'].config(text=f"Select ({num_cannot})" if num_cannot > 0 else "Select")
+            num_prefer = len(selected_prefer_days.get(row_num, []))
+            row_widgets['prefer_button'].config(text=f"Select ({num_prefer})" if num_prefer > 0 else "Select")
+            num_manual = len(selected_manual_days.get(row_num, []))
+            row_widgets['manual_button'].config(text=f"Select ({num_manual})" if num_manual > 0 else "Select")
     print(f"Debugging. Year: {year}, month {month}, Holiday list: {holiday_days}, Shift list length {len(shifts_list)}")
     for worker in workers_list:
         print(worker)
