@@ -6,6 +6,7 @@ import os # Bring in interaction with Windows/Apple/Linux
 import json # Bring in functionality of saving/loading javascript object notation - data-interchange format
 from tkinter import *  # Bring in the Tkinter toolbox for the window (GUI).
 from tkinter import filedialog
+import openpyxl # Allows to use .xlsx files
 
 # --------------------------------------------------------------------
 # App plan:
@@ -1092,6 +1093,159 @@ def load_preferences():
         print(worker)
     print(selected_cannot_days)
 
+# Load .xlsx function
+# Accepts this order:
+# A1: Name, B1: 1, C1: 2, D1: 3 ... AF132: 31
+# A2: Mantas, B2: "clear", C2: red fill, D2: green fill...
+# Outputs: Worker Mantas, cannot work Day/Night 2, prefers Day/Night 3.
+
+def load_xlsx_preferences(): 
+    global workers_list, worker_rows, worker_row_number
+    global selected_cannot_days, selected_prefer_days, selected_manual_days
+
+    file_path = filedialog.askopenfilename(
+        filetypes=[("Excel files", "*.xlsx *.xlsm"), ("All files", "*.*")]
+    )
+    if not file_path:
+        return
+
+    try:
+        # Important: data_only=False → we can read cell colors/formatting
+        wb = openpyxl.load_workbook(file_path, data_only=False)
+        
+        # Try to find a suitable sheet
+        sheet = None
+        for sname in wb.sheetnames: # wb.sheetnames is a list of all sheet names in the file
+            if any(x in sname.lower() for x in ["feuille", "sheet", "preferences", "rota"]): # If the sheet name (ignoring uppercase/lowercase) contains any of the words: feuille, sheet, preferences, or rota → this is probably the right sheet!
+                sheet = wb[sname]
+                break
+        if sheet is None: # Fallback: just take whatever sheet Excel considers the “active” one (the one that was open when the file was last saved). This is a safe default.
+            sheet = wb.active
+
+        # Find header row and the "Name" column
+        header_row = 1
+        name_col = None
+        for col in range(1, sheet.max_column + 1):
+            val = sheet.cell(row=header_row, column=col).value
+            if val and str(val).strip().lower() == "name":
+                name_col = col
+                break
+
+        if name_col is None:
+            error_label.config(text="Error: Could not find a column with header 'Name'")
+            return
+
+        # Clear old data completely
+        for row_widgets in worker_rows[:]:
+            for key, widget in row_widgets.items():
+                if key != 'row_num' and widget.winfo_exists(): # 'row_num' does not have a widget (like entry/button), so it skips this part
+                    widget.destroy() # ← tells Tkinter: remove this button/textbox from the window, using a loop it removes all widgets
+        worker_rows.clear()
+        worker_row_number = 1
+        workers_list.clear()
+        selected_cannot_days.clear()
+        selected_prefer_days.clear()
+        selected_manual_days.clear()
+
+        loaded_count = 0
+
+        # Loop through each worker row (starting from row 2)
+        for r in range(2, sheet.max_row + 1):
+            name_cell = sheet.cell(row=r, column=name_col)
+            name_val = name_cell.value
+            if not name_val:
+                continue
+            name = str(name_val).strip()
+            if not name:
+                continue
+
+            # Now scan columns B to AF (2 to 32) = days 1 to 31
+            cannot_list = []
+            prefer_list  = []
+
+            for day in range(1, 32):  # days 1–31
+                col = day + 1         # B=2 → day 1, C=3 → day 2, ...
+                if col > sheet.max_column:
+                    break
+                
+                cell = sheet.cell(row=r, column=col)
+                
+                # Only check cells that actually have a solid background color
+                if cell.fill and cell.fill.fill_type == 'solid':
+                    color = cell.fill.start_color.rgb
+                    
+                    if color:
+                        # Remove alpha channel if present → keep only RRGGBB part
+                        color_hex = color.upper()[-6:]   # last 6 chars = RRGGBB
+                        
+                        # Red (common variations)
+                        if color_hex in ['FF0000', 'FF0100', 'FE0000']:  # allow tiny variations
+                            cannot_list.append(f"Day {day}")
+                            cannot_list.append(f"Night {day}")
+                        
+                        # Green (common variations)
+                        elif color_hex in ['00FF00', '00FF01', '01FF00', '00FE00']:
+                            prefer_list.append(f"Day {day}")
+                            prefer_list.append(f"Night {day}")              
+
+            # Create the worker dictionary (with defaults)
+            worker_dict = {
+                "name": name,
+                "shifts_to_fill": [0, 100],
+                "cannot_work": cannot_list,
+                "prefers": prefer_list,
+                "max_weekends": 100,
+                "max_24hr": 100,
+                "worker_row_number": worker_row_number
+            }
+            workers_list.append(worker_dict)
+
+            # Add the row to the GUI
+            current_row_num = worker_row_number
+            add_worker_row()  # this creates name entry, range entry, buttons, etc.
+
+            # Fill in the values we read
+            for row_widgets in worker_rows:
+                if row_widgets['row_num'] == current_row_num:
+                    row_widgets['name_entry'].delete(0, END)
+                    row_widgets['name_entry'].insert(0, name)
+                    
+                    row_widgets['range_entry'].delete(0, END)
+                    row_widgets['range_entry'].insert(0, "0-100")  # you can change default later
+                    
+                    row_widgets['max_weekends_entry'].delete(0, END)
+                    row_widgets['max_weekends_entry'].insert(0, "100")
+                    
+                    row_widgets['max_24hr_entry'].delete(0, END)
+                    row_widgets['max_24hr_entry'].insert(0, "100")
+
+                    # Update button labels to show how many days are set
+                    num_c = len(cannot_list)
+                    num_p = len(prefer_list)
+                    
+                    row_widgets['cannot_button'].config(
+                        text=f"Select ({num_c})" if num_c > 0 else "Select"
+                    )
+                    row_widgets['prefer_button'].config(
+                        text=f"Select ({num_p})" if num_p > 0 else "Select"
+                    )
+                    row_widgets['manual_button'].config(text="Select")
+                    break
+
+            # Store selections so popups show correct checkboxes ticked
+            selected_cannot_days[current_row_num] = cannot_list
+            selected_prefer_days[current_row_num] = prefer_list
+            selected_manual_days[current_row_num] = []
+
+            loaded_count += 1
+            worker_row_number += 1   # Very important – increment for next worker
+
+        error_label.config(text=f"Loaded {loaded_count} worker(s) — red = cannot, green = prefer")
+
+    except Exception as e:
+        error_label.config(text=f"Error reading file: {str(e)}")
+        print("Detailed error:", e)  # print to console helps debugging
+
 # ----------------------------------------------------------------------------
 # PuLP Solve
 # ----------------------------------------------------------------------------
@@ -1402,15 +1556,16 @@ def create_rota():
 Button(add_worker_button_frame, text="Add Worker", command=add_worker_row, width=10, pady=2).pack() 
 
 # Create rota button.
-Button(root, text="Create Rota", command=create_rota).pack()  # Button to create a rota.
+Button(root, text="Create Rota", command=create_rota).pack(pady=4)  # Button to create a rota.
 
 # Frame for settings, saving and loading buttons.
 settings_frame = Frame(root)
 settings_frame.pack()
 
-Button(settings_frame, text="PuLP Settings", width=18, command=pulp_settings).pack(side=LEFT, padx=5)
-Button(settings_frame, text="Save Preferences", width=18, command=save_preferences).pack(side=LEFT, padx=5)
-Button(settings_frame, text="Load", width=18, command=load_preferences).pack(side=LEFT, padx=5)
+Button(settings_frame, text="PuLP Settings", width=14, command=pulp_settings).pack(side=LEFT, padx=4)
+Button(settings_frame, text="Save Preferences", width=14, command=save_preferences).pack(side=LEFT, padx=4)
+Button(settings_frame, text="Load", width=14, command=load_preferences).pack(side=LEFT, padx=4)
+Button(settings_frame, text="Load .xlsx", width=14, command=load_xlsx_preferences).pack(side=LEFT, padx=4)
 
 # Error label (same).
 error_label = Label(root, text="")  # For errors.
