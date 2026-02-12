@@ -1,49 +1,30 @@
 """
-SOLVER.PY - The Brain of the Rota App
-=====================================
+SOLVER.PY - The Brain of the Rota App (Multi-Unit Version)
+===========================================================
 
-This file does ONE job: solve the rota scheduling problem.
-It's like a puzzle solver that figures out who works when.
-
-Think of it like this:
-- main.py = The face of the app (buttons, windows, what you see)
-- solver.py = The brain (the math and logic that figures out the schedule)
+This file solves the rota scheduling problem for multiple hospital units.
 """
 
-import pulp  # This is the puzzle-solving library
-import sys   # Helps us find files when running as .exe
-import os    # Helps us work with file paths
+import pulp
+import sys
+import os
 
 
-def solve_rota(shifts_list, workers_list, settings):
+def solve_rota(shifts_list, workers_list, units_list, settings):
     """
-    CREATE_ROTA - The main function that solves the scheduling puzzle
+    Multi-unit rota solver.
     
-    What it does:
-    - Takes a list of shifts (like "Day 1", "Night 15")
-    - Takes a list of workers (doctors/nurses with their preferences)
-    - Figures out the best way to assign workers to shifts
-    
-    Parameters (inputs):
-    - shifts_list: A list of dictionaries, each representing a shift
-      Example: {"name": "Day 1", "type": "Day", "tags": ["Monday"], "assigned_worker": None}
-    - workers_list: A list of dictionaries, each representing a worker
-      Example: {"name": "John", "shifts_to_fill": [3, 5], "cannot_work": ["Day 1"], ...}
-    - settings: A dictionary with scoring rules
-      Example: {"points_filled": 100, "points_preferred": 5, ...}
-    
-    Returns:
-    - assignments: A dictionary mapping shift names to worker names
-      Example: {"Day 1": "John", "Night 1": "Sarah", ...}
-    - summary: A dictionary with statistics
-      Example: {"preferences_count": 15, "twenty_four_count": 3, ...}
+    Handles shifts across multiple units with rules:
+    - Only one shift per worker per day (except 24hr = Day+Night SAME unit)
+    - No Night → Day next day (any units)
+    - No Night → Night next day (any units)
+    - No Day → Day next day (if enabled)
+    - 24hr shifts only possible within same unit
     """
     
     # ============================================================================
-    # STEP 1: Extract settings from the settings dictionary
+    # STEP 1: Extract settings
     # ============================================================================
-    # Think of settings like a recipe card - we're pulling out each ingredient
-    
     points_filled = settings.get("points_filled", 100)
     points_preferred = settings.get("points_preferred", 5)
     points_spacing = settings.get("points_spacing", -1)
@@ -53,103 +34,121 @@ def solve_rota(shifts_list, workers_list, settings):
     enforce_no_adj_days = settings.get("enforce_no_adj_days", True)
     
     # ============================================================================
-    # STEP 2: Build the assignments dictionary from shifts_list
+    # STEP 2: Build assignments dictionary
     # ============================================================================
-    # This creates a mapping: shift name → worker (or None if unassigned)
-    # Example: {"Day 1": "John", "Night 1": None, "Day 2": "Sarah"}
-    
     assignments = {}
     for shift in shifts_list:
-        # For each shift, store who's assigned (might be None)
         assignments[shift["name"]] = shift["assigned_worker"]
     
     # ============================================================================
-    # STEP 3: Find empty shifts (the ones we need to fill)
+    # STEP 3: Find empty shifts
     # ============================================================================
-    # We only want to assign workers to shifts that are currently empty (None)
-    
     empty_shifts = [name for name in assignments if assignments[name] is None]
     
-    # Find empty weekend shifts specifically (for weekend limit rule)
+    # Find empty weekend shifts
     empty_weekend_shifts = []
     for shift in shifts_list:
-        # If the shift is empty AND tagged as "Weekend", add it to the list
         if shift["name"] in empty_shifts and "Weekend" in shift["tags"]:
             empty_weekend_shifts.append(shift["name"])
     
     # ============================================================================
-    # STEP 4: Get the list of worker names
+    # STEP 4: Get worker names
     # ============================================================================
-    # Extract just the names from the workers_list
-    # This turns [{"name": "John", ...}, {"name": "Sarah", ...}]
-    # Into ["John", "Sarah"]
-    
     workers = [w["name"] for w in workers_list]
     
     # ============================================================================
-    # STEP 5: Find "bad pairs" of shifts (shifts that shouldn't be consecutive)
+    # STEP 5: Helper function to parse shift names
     # ============================================================================
-    # These are rules like "don't work Night then Day the next day"
+    def parse_shift_name(shift_name):
+        """
+        Parse shift name into components.
+        
+        Examples:
+        - "Day 5 Cardiology" → ("Day", 5, "Cardiology")
+        - "Night 12 Internal Medicine" → ("Night", 12, "Internal Medicine")
+        """
+        parts = shift_name.split()
+        shift_type = parts[0]  # "Day" or "Night"
+        day = int(parts[1])    # Day number
+        unit = " ".join(parts[2:])  # Unit name (may contain spaces)
+        return shift_type, day, unit
     
-    bad_night_to_day_pairs = []      # Night shift followed by Day shift next day
-    bad_adjacent_nights_pairs = []   # Night shift followed by Night shift next day
-    bad_adjacent_days_pairs = []     # Day shift followed by Day shift next day
-    twenty_four_hour_shift_pairs = [] # Day shift AND Night shift on the SAME day
+    # ============================================================================
+    # STEP 6: Build bad pairs with multi-unit logic
+    # ============================================================================
     
-    # Sort the empty shifts by day number (so we can check consecutive days)
-    # This turns ["Day 5", "Night 2", "Day 3"] into ["Night 2", "Day 3", "Day 5"]
-    sorted_shift_names = sorted(empty_shifts, key=lambda s: int(s.split(" ")[1]))
+    bad_night_to_day_pairs = []       # Night (any unit) day X → Day (any unit) day X+1
+    bad_adjacent_nights_pairs = []    # Night (any unit) day X → Night (any unit) day X+1
+    bad_adjacent_days_pairs = []      # Day (any unit) day X → Day (any unit) day X+1
+    twenty_four_hour_shift_pairs = [] # Day X unit A + Night X unit A (SAME unit only)
+    bad_same_day_non24hr_pairs = []   # Any two shifts on same day that are NOT (Day+Night same unit)
     
-    # Loop through all pairs of shifts
-    for i in range(len(sorted_shift_names)):
-        for j in range(i+1, len(sorted_shift_names)):
-            current = sorted_shift_names[i]      # Example: "Night 5"
-            next_shift = sorted_shift_names[j]   # Example: "Day 6"
-            
-            # Extract the day numbers from the shift names
-            # "Night 5" → 5, "Day 6" → 6
-            current_day = int(current.split(" ")[1])
-            next_day = int(next_shift.split(" ")[1])
-            
-            # Check if these are consecutive days (next_day = current_day + 1)
-            if next_day == current_day + 1:
-                # Rule 1: Night → Day (not allowed)
-                if "Night" in current and "Day" in next_shift:
-                    bad_night_to_day_pairs.append((current, next_shift))
+    # Group shifts by day for easier processing
+    shifts_by_day = {}
+    for shift_name in empty_shifts:
+        shift_type, day, unit = parse_shift_name(shift_name)
+        if day not in shifts_by_day:
+            shifts_by_day[day] = []
+        shifts_by_day[day].append((shift_name, shift_type, unit))
+    
+    # ========================================================================
+    # Process consecutive days for Night→Day, Night→Night, Day→Day
+    # ========================================================================
+    for day in sorted(shifts_by_day.keys()):
+        if day + 1 in shifts_by_day:
+            # Compare all shifts on day X with all shifts on day X+1
+            for shift1_name, type1, unit1 in shifts_by_day[day]:
+                for shift2_name, type2, unit2 in shifts_by_day[day + 1]:
+                    # Rule: Night → Day (any units) is forbidden
+                    if type1 == "Night" and type2 == "Day":
+                        bad_night_to_day_pairs.append((shift1_name, shift2_name))
+                    
+                    # Rule: Night → Night (any units) is forbidden
+                    if type1 == "Night" and type2 == "Night":
+                        bad_adjacent_nights_pairs.append((shift1_name, shift2_name))
+                    
+                    # Rule: Day → Day (any units) is forbidden (if enabled)
+                    if type1 == "Day" and type2 == "Day":
+                        bad_adjacent_days_pairs.append((shift1_name, shift2_name))
+    
+    # ========================================================================
+    # Process same-day shifts
+    # ========================================================================
+    for day, shifts_on_day in shifts_by_day.items():
+        # Compare all pairs of shifts on the same day
+        for i, (shift1_name, type1, unit1) in enumerate(shifts_on_day):
+            for shift2_name, type2, unit2 in shifts_on_day[i+1:]:
+                # Check if this is a valid 24hr shift (Day + Night, SAME unit)
+                is_same_unit = (unit1 == unit2)
+                is_day_and_night = {type1, type2} == {"Day", "Night"}
                 
-                # Rule 2: Night → Night (not allowed if setting is True)
-                if "Night" in current and "Night" in next_shift:
-                    bad_adjacent_nights_pairs.append((current, next_shift))
-                
-                # Rule 3: Day → Day (not allowed if setting is True)
-                if "Day" in current and "Day" in next_shift:
-                    bad_adjacent_days_pairs.append((current, next_shift))
-            
-            # Rule 4: Same day (24-hour shift - discouraged with negative points)
-            if next_day == current_day:
-                twenty_four_hour_shift_pairs.append((current, next_shift))
+                if is_same_unit and is_day_and_night:
+                    # This is an ALLOWED 24hr shift
+                    twenty_four_hour_shift_pairs.append((shift1_name, shift2_name))
+                else:
+                    # This is FORBIDDEN (different units or both same type)
+                    # Examples: 
+                    # - "Day 5 Cardiology" + "Day 5 Internal Medicine" (different units)
+                    # - "Day 5 Cardiology" + "Night 5 Internal Medicine" (different units)
+                    # - "Day 5 Cardiology" + "Day 5 Cardiology" (same type, impossible but handle it)
+                    bad_same_day_non24hr_pairs.append((shift1_name, shift2_name))
     
-    # ============================================================================
-    # STEP 6: Find shifts that are too close together (bad spacing)
-    # ============================================================================
-    # Example: Working on Day 3 and Day 7 is only 4 days apart - too close!
-    
-    # Get ALL shift names (not just empty ones) and sort by day
+    # ========================================================================
+    # Build spacing pairs (shifts too close together)
+    # ========================================================================
     all_shift_names = sorted([shift["name"] for shift in shifts_list], 
-                            key=lambda s: int(s.split(" ")[1]))
+                            key=lambda s: parse_shift_name(s)[1])  # Sort by day number
     
     bad_spacing_pairs = []
-    
     for i in range(len(all_shift_names)):
         for j in range(i+1, len(all_shift_names)):
             shift1 = all_shift_names[i]
             shift2 = all_shift_names[j]
             
-            day1 = int(shift1.split(" ")[1])
-            day2 = int(shift2.split(" ")[1])
+            _, day1, _ = parse_shift_name(shift1)
+            _, day2, _ = parse_shift_name(shift2)
             
-            # If shifts are too close (less than threshold days apart)
-            # AND both are empty (available to assign)
+            # If shifts are too close together AND both are empty
             if day2 - day1 < spacing_days_threshold:
                 if shift1 in empty_shifts and shift2 in empty_shifts:
                     bad_spacing_pairs.append((shift1, shift2))
@@ -157,25 +156,37 @@ def solve_rota(shifts_list, workers_list, settings):
     # ============================================================================
     # STEP 7: Extract worker preferences and limits
     # ============================================================================
-    # Create dictionaries (like quick lookup tables) for each worker's info
-    
-    # What shifts each worker PREFERS to work
-    worker_prefers = {w["name"]: w["prefers"] for w in workers_list}
-    
-    # How many 24-hour shifts each worker can do (maximum)
     max_24hr = {w["name"]: w["max_24hr"] for w in workers_list}
-    
-    # How many weekend shifts each worker can do (maximum)
     max_weekends = {w["name"]: w["max_weekends"] for w in workers_list}
-    
-    # What shifts each worker CANNOT work (hard constraint)
-    worker_cannot = {w["name"]: w["cannot_work"] for w in workers_list}
-    
+
+    worker_prefers = {}
+    for w in workers_list:
+        name = w["name"]
+        old_prefers = w["prefers"]   # e.g. ["Day 5", "Night 12"]
+        new_prefers = []       
+        for unit in units_list:
+            for old_shift in old_prefers:
+                # old_shift is like "Day 5" or "Night 3"
+                new_shift = f"{old_shift} {unit}"
+                new_prefers.append(new_shift)
+        worker_prefers[name] = new_prefers # new shift is "Day 5 Cardiology", "Day 5 Internal Medicine"
+
+    # Now transform the cannot lists
+    worker_cannot = {}
+    for w in workers_list:
+        name = w["name"]
+        old_forbidden = w["cannot_work"]   # e.g. ["Day 5", "Night 12"]
+        new_forbidden = []       
+        for unit in units_list:
+            for old_shift in old_forbidden:
+                # old_shift is like "Day 5" or "Night 3"
+                new_shift = f"{old_shift} {unit}"
+                new_forbidden.append(new_shift)
+        worker_cannot[name] = new_forbidden
+
     # ============================================================================
     # STEP 8: Check if there's anything to solve
     # ============================================================================
-    # If there are no empty shifts OR no workers, we can't assign anything!
-    
     if not empty_shifts or not workers:
         print("No empty shifts or no workers – nothing to assign.")
         return assignments, {
@@ -188,138 +199,121 @@ def solve_rota(shifts_list, workers_list, settings):
     # ============================================================================
     # STEP 9: Create the optimization problem
     # ============================================================================
-    # This is where we set up the "puzzle" for PuLP to solve
-    
-    # Create a problem instance - we want to MAXIMIZE our score
-    prob = pulp.LpProblem("Rota_Assignment", pulp.LpMaximize)
+    prob = pulp.LpProblem("Rota_Assignment_MultiUnit", pulp.LpMaximize)
     
     # ============================================================================
     # STEP 10: Create decision variables
     # ============================================================================
-    # These are the "unknowns" that PuLP will figure out
-    
-    # assign_vars[worker][shift] = 1 if worker is assigned to shift, 0 otherwise
-    # Example: assign_vars["John"]["Day 5"] could be 0 or 1
     assign_vars = pulp.LpVariable.dicts("Assign", 
                                        (workers, empty_shifts), 
                                        0, 1, 
                                        pulp.LpBinary)
     
-    # twenty_four_vars[worker][pair] = 1 if worker does both shifts in the pair
-    # This helps us track 24-hour shifts
     twenty_four_vars = pulp.LpVariable.dicts("24hr", 
                                             (workers, twenty_four_hour_shift_pairs), 
                                             0, 1, 
                                             pulp.LpBinary)
     
-    # spacing_var[worker][pair] = 1 if worker does both shifts in a bad spacing pair
-    # This helps us penalize shifts that are too close together
     spacing_var = pulp.LpVariable.dicts("SpacingBad", 
                                        (workers, bad_spacing_pairs), 
                                        0, 1, 
                                        pulp.LpBinary)
     
     # ============================================================================
-    # STEP 11: Define the objective function (what we want to maximize)
+    # STEP 11: Define the objective function
     # ============================================================================
-    # This is like a scoring system - we want the highest score possible!
-    
     prob += (
-        # Points for each shift we fill (positive - we WANT to fill shifts)
         points_filled * pulp.lpSum(assign_vars[w][shift] 
                                    for w in workers 
                                    for shift in empty_shifts)
-        
-        # Extra points for filling preferred shifts (positive - workers are happier)
         + points_preferred * pulp.lpSum(assign_vars[w][shift] 
                                        for w in workers 
                                        for shift in empty_shifts 
                                        if shift in worker_prefers[w])
-        
-        # Penalty for shifts that are too close together (negative - we DON'T want this)
         + points_spacing * pulp.lpSum(spacing_var[w][pair] 
                                      for w in workers 
                                      for pair in bad_spacing_pairs)
-        
-        # Penalty for 24-hour shifts (negative - we want to minimize these)
         + points_24hr * pulp.lpSum(twenty_four_vars[w][pair] 
                                   for w in workers 
                                   for pair in twenty_four_hour_shift_pairs)
     )
     
     # ============================================================================
-    # STEP 12: Add constraints (rules that MUST be followed)
+    # STEP 12: Add constraints
     # ============================================================================
     
-    # CONSTRAINT 1: Each shift can have at most 1 worker
-    # (We can't have two people doing the same shift!)
+    # CONSTRAINT 1: Each shift has at most 1 worker
     for shift in empty_shifts:
         prob += pulp.lpSum(assign_vars[w][shift] for w in workers) <= 1
     
-    # CONSTRAINT 2: Each worker must work within their shift range
-    # Example: If a worker wants 3-5 shifts, they must work between 3 and 5
+    # CONSTRAINT 2: Worker must work within their shift range
     for w in workers:
-        # Find this worker's min and max shifts
         min_shifts, max_shifts = next(worker["shifts_to_fill"] 
                                      for worker in workers_list 
                                      if worker["name"] == w)
-        
-        # Worker can't work MORE than max_shifts
         prob += pulp.lpSum(assign_vars[w][shift] for shift in empty_shifts) <= max_shifts
-        
-        # Worker must work AT LEAST min_shifts
         prob += pulp.lpSum(assign_vars[w][shift] for shift in empty_shifts) >= min_shifts
     
-    # CONSTRAINT 3: No worker can work Night then Day the next day
-    # (This is a hard rule - it's physically exhausting!)
+    # CONSTRAINT 3: No Night → Day next day (any units)
     for pair in bad_night_to_day_pairs:
         night, day = pair
         for w in workers:
-            # The sum can't be 2 (both shifts), so it must be 0 or 1
             prob += assign_vars[w][night] + assign_vars[w][day] <= 1
     
-    # CONSTRAINT 4: No adjacent night shifts (if enabled)
-    # Night → Night next day is not allowed
+    # CONSTRAINT 4: No adjacent nights (if enabled)
     if enforce_no_adj_nights:
         for pair in bad_adjacent_nights_pairs:
             current, next_shift = pair
             for w in workers:
                 prob += assign_vars[w][current] + assign_vars[w][next_shift] <= 1
     
-    # CONSTRAINT 5: No adjacent day shifts (if enabled)
-    # Day → Day next day is not allowed
+    # CONSTRAINT 5: No adjacent days (if enabled)
     if enforce_no_adj_days:
         for pair in bad_adjacent_days_pairs:
             current, next_shift = pair
             for w in workers:
                 prob += assign_vars[w][current] + assign_vars[w][next_shift] <= 1
     
-    # CONSTRAINT 6: Link 24-hour variables
-    # This ensures twenty_four_vars[w][pair] = 1 only when BOTH shifts are worked
-    for pair in twenty_four_hour_shift_pairs:
-        day, night = pair
+    # CONSTRAINT 6: NEW - No two shifts on same day (except allowed 24hr)
+    # This prevents: "Day 5 Cardiology" + "Night 5 Internal Medicine"
+    # But allows: "Day 5 Cardiology" + "Night 5 Cardiology" (handled separately)
+    for pair in bad_same_day_non24hr_pairs:
+        shift1, shift2 = pair
         for w in workers:
-            # If both shifts are 1, this makes twenty_four_vars >= 1, so it becomes 1
-            prob += twenty_four_vars[w][pair] >= assign_vars[w][day] + assign_vars[w][night] - 1
-            
-            # If day shift is 0, this forces twenty_four_vars to be 0
-            prob += twenty_four_vars[w][pair] <= assign_vars[w][day]
-            
-            # If night shift is 0, this forces twenty_four_vars to be 0
-            prob += twenty_four_vars[w][pair] <= assign_vars[w][night]
+            prob += assign_vars[w][shift1] + assign_vars[w][shift2] <= 1
     
-    # CONSTRAINT 7: Limit on 24-hour shifts per worker
+    # CONSTRAINT 7: Link 24-hour variables (only for same-unit Day+Night pairs)
+    for pair in twenty_four_hour_shift_pairs:
+        s1, s2 = pair
+        
+        # Figure out which is Day and which is Night
+        type1, _, _ = parse_shift_name(s1)
+        type2, _, _ = parse_shift_name(s2)
+        
+        if type1 == "Day":
+            day_shift, night_shift = s1, s2
+        else:
+            day_shift, night_shift = s2, s1
+        
+        for w in workers:
+            # If both are assigned, 24hr var becomes 1
+            prob += twenty_four_vars[w][pair] >= assign_vars[w][day_shift] + assign_vars[w][night_shift] - 1
+            # If day is 0, 24hr var must be 0
+            prob += twenty_four_vars[w][pair] <= assign_vars[w][day_shift]
+            # If night is 0, 24hr var must be 0
+            prob += twenty_four_vars[w][pair] <= assign_vars[w][night_shift]
+    
+    # CONSTRAINT 8: Limit on 24-hour shifts per worker
     for w in workers:
         prob += pulp.lpSum(twenty_four_vars[w][pair] 
                           for pair in twenty_four_hour_shift_pairs) <= max_24hr[w]
     
-    # CONSTRAINT 8: Limit on weekend shifts per worker
+    # CONSTRAINT 9: Limit on weekend shifts per worker
     for w in workers:
         prob += pulp.lpSum(assign_vars[w][shift] 
                           for shift in empty_weekend_shifts) <= max_weekends[w]
     
-    # CONSTRAINT 9: Link spacing variables
-    # Similar to 24-hour variables, but for shifts that are too close together
+    # CONSTRAINT 10: Link spacing variables
     for pair in bad_spacing_pairs:
         s1, s2 = pair
         for w in workers:
@@ -327,49 +321,28 @@ def solve_rota(shifts_list, workers_list, settings):
             prob += spacing_var[w][pair] <= assign_vars[w][s1]
             prob += spacing_var[w][pair] <= assign_vars[w][s2]
     
-    # CONSTRAINT 10: Workers cannot be assigned to shifts they marked as "cannot work"
+    # CONSTRAINT 11: Workers cannot be assigned to forbidden shifts
     for w in workers:
         for forbidden_shift in worker_cannot[w]:
             if forbidden_shift in empty_shifts:
-                # Force this to be 0 (not assigned)
                 prob += assign_vars[w][forbidden_shift] <= 0
     
     # ============================================================================
-    # STEP 13: Find the CBC solver path
-    # ============================================================================
-    # CBC is the actual solver program that does the optimization
-    # We need to tell PuLP where to find it
-    
-    if hasattr(sys, '_MEIPASS'):
-        # We're running as a .exe file (PyInstaller packages the app)
-        cbc_path = os.path.join(sys._MEIPASS, 'cbc.exe')
-    else:
-        # We're running as a normal .py file
-        cbc_path = 'cbc.exe'
-    
-    print(f"Using CBC path: {cbc_path}")
-    
-    # ============================================================================
-    # STEP 14: Solve the problem!
+    # STEP 13: Solve the problem
     # ============================================================================
     print("Starting PuLP solve – time limit 60 seconds...")
     
-    # Try to solve the problem with a 60-second time limit
-    # NOTE: Choose one of these lines depending on your setup:
-    
-    # OPTION 1: If you have cbc.exe bundled with your app (for .exe distribution)
-    # status = prob.solve(pulp.COIN_CMD(msg=1, timeLimit=60, path=cbc_path))
-    
-    # OPTION 2: If you're running the .py file directly (development mode)
-    status = prob.solve(pulp.PULP_CBC_CMD(msg=1, timeLimit=60))
+    # Choose solver based on environment
+    if hasattr(sys, '_MEIPASS'):
+        cbc_path = os.path.join(sys._MEIPASS, 'cbc.exe')
+        status = prob.solve(pulp.COIN_CMD(msg=1, timeLimit=60, path=cbc_path))
+    else:
+        status = prob.solve(pulp.PULP_CBC_CMD(msg=1, timeLimit=600000))
     
     # ============================================================================
-    # STEP 15: Check if the solution is valid
+    # STEP 14: Check solution status
     # ============================================================================
-    
     if pulp.LpStatus[status] == "Infeasible":
-        # The constraints are impossible to satisfy!
-        # Example: Asking someone to work 10 shifts but only 5 shifts exist
         print("INFEASIBLE: Cannot create a valid rota with these constraints.")
         return assignments, {
             "preferences_count": 0,
@@ -396,27 +369,22 @@ def solve_rota(shifts_list, workers_list, settings):
     print(f"Solve finished! Status: {pulp.LpStatus[status]}")
     
     # ============================================================================
-    # STEP 16: Extract the solution
+    # STEP 15: Extract the solution
     # ============================================================================
-    # PuLP has found values for all our variables - now we read them
-    
     for w in workers:
         for shift in empty_shifts:
-            # If the variable = 1, assign this worker to this shift
             if assign_vars[w][shift].value() == 1:
                 assignments[shift] = w
     
     print("Assignments done!")
     
-    # Print the total score
+    # Print total score
     total_points = prob.objective.value()
     print("Total points for this rota:", total_points)
     
     # ============================================================================
-    # STEP 17: Calculate summary statistics
+    # STEP 16: Calculate summary statistics
     # ============================================================================
-    # Count how many preferred shifts, 24-hour shifts, and bad spacing pairs
-    
     preferences_count = 0
     twenty_four_count = 0
     bad_spacing_count = 0
@@ -428,7 +396,7 @@ def solve_rota(shifts_list, workers_list, settings):
         if shift in worker_prefers[worker]:
             preferences_count += 1
     
-    # Group shifts by worker to count 24-hour and spacing issues
+    # Group shifts by worker
     worker_shifts = {}
     for shift, worker in assignments.items():
         if worker is not None:
@@ -439,17 +407,17 @@ def solve_rota(shifts_list, workers_list, settings):
     # Count 24-hour shifts and bad spacing
     for worker, shifts in worker_shifts.items():
         # Sort shifts by day number
-        sorted_shifts = sorted(shifts, key=lambda s: int(s.split(" ")[1]))
+        sorted_shifts = sorted(shifts, key=lambda s: parse_shift_name(s)[1])
         
         for i in range(len(sorted_shifts) - 1):
             current = sorted_shifts[i]
             next_shift = sorted_shifts[i+1]
             
-            current_day = int(current.split(" ")[1])
-            next_day = int(next_shift.split(" ")[1])
+            _, current_day, current_unit = parse_shift_name(current)
+            _, next_day, next_unit = parse_shift_name(next_shift)
             
-            # Same day = 24-hour shift
-            if current_day == next_day:
+            # Same day AND same unit = 24-hour shift
+            if current_day == next_day and current_unit == next_unit:
                 twenty_four_count += 1
             
             # Too close = bad spacing
@@ -457,7 +425,7 @@ def solve_rota(shifts_list, workers_list, settings):
                 bad_spacing_count += 1
     
     # ============================================================================
-    # STEP 18: Print final summary
+    # STEP 17: Print summary
     # ============================================================================
     print("Summary:")
     print("Number of preferred shifts assigned:", preferences_count)
@@ -465,7 +433,7 @@ def solve_rota(shifts_list, workers_list, settings):
     print(f"Number of bad spacing pairs (<{spacing_days_threshold} days apart):", bad_spacing_count)
     
     # ============================================================================
-    # STEP 19: Return results
+    # STEP 18: Return results
     # ============================================================================
     summary = {
         "preferences_count": preferences_count,
