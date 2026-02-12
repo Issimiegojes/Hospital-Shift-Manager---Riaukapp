@@ -7,7 +7,7 @@ import json # Bring in functionality of saving/loading javascript object notatio
 from tkinter import *  # Bring in the Tkinter toolbox for the window (GUI).
 from tkinter import filedialog
 import openpyxl # Allows to use .xlsx files
-from selection_popups import prefer_count, cannot_count, manual_count # bring popup_select_shifts functions from a another file
+from selection_popups import prefer_count, cannot_count, prefer_unit_count, manual_count # bring popup_select_shifts functions from a another file
 from solver import solve_rota # bring PuLP solver from another file
 
 # --------------------------------------------------------------------
@@ -29,6 +29,7 @@ workers_list = []
 units_list = [] # Empty list to store units: "Cardiology", "Internal Medicine - Endocrinology" etc.
 selected_cannot_days = {}  # Changed to dict to store per row_num
 selected_prefer_days = {}  # Dict to store preferred days per row_num
+selected_units = {}        # Dict to store preferred units per row_num
 selected_manual_days = {}  # Dict to store manual days per row_num
 
 # Global variables: constant
@@ -207,6 +208,22 @@ def show_cannot_popup(row_num):
 
     cannot_count(cannot_popup_inputs)
 
+def show_prefer_unit_popup(row_num):
+
+    prefer_unit_popup_inputs = {
+        "give_root": root,
+        "give_days_list": days_list,
+        "give_starting_weekday": starting_weekday,
+        "give_worker_rows": worker_rows,
+        "give_row_num": row_num,
+        "give_selected_manual_days": selected_manual_days,   
+        "give_error_label": error_label,
+        "give_units_list": units_list,
+        "give_selected_units": selected_units,    
+    }
+    
+    prefer_unit_count(prefer_unit_popup_inputs)
+
 def show_manual_popup(row_num):
 
     manual_popup_inputs = {
@@ -277,7 +294,7 @@ worker_container.pack()
 
 # Create the canvas (drawing board)
 global worker_canvas, worker_scrollbar, worker_inner_frame
-worker_canvas = Canvas(worker_container, width=830)  # Height=200 pixels – change if you want taller/shorter
+worker_canvas = Canvas(worker_container, width=915, borderwidth=2, relief="groove")  # Height=200 pixels – change if you want taller/shorter
 worker_canvas.pack(side=LEFT, fill="both")  # Put on left, fill space
 
 # Create the scrollbar and link it to the canvas
@@ -387,10 +404,11 @@ Label(workers_frame, text="Cannot Days", width=10, padx=2, pady=2).grid(row=0, c
 Label(workers_frame, text="Prefer Days", width=10, padx=2, pady=2).grid(row=0, column=3, sticky="ew", padx=2, pady=2)
 Label(workers_frame, text="Max Wknds", width=10, padx=2, pady=2).grid(row=0, column=4, sticky="ew", padx=2, pady=2)
 Label(workers_frame, text="Max 24hr", width=10, padx=2, pady=2).grid(row=0, column=5, sticky="ew", padx=2, pady=2)
-Label(workers_frame, text="Manual Shifts", width=10, padx=2, pady=2).grid(row=0, column=6, sticky="ew", padx=2, pady=2)
-Label(workers_frame, text="Save", width=10, padx=2, pady=2).grid(row=0, column=7, sticky="ew", padx=2, pady=2)
-Label(workers_frame, text="Assign Manual", width=10, padx=2, pady=2).grid(row=0, column=8, sticky="ew", padx=2, pady=2)
-Label(workers_frame, text="Delete", width=10, padx=2, pady=2).grid(row=0, column=9, sticky="ew", padx=2, pady=2)
+Label(workers_frame, text="Prefer Unit", width=10, padx=2, pady=2).grid(row=0, column=6, sticky="ew", padx=2, pady=2)
+Label(workers_frame, text="Manual Shifts", width=10, padx=2, pady=2).grid(row=0, column=7, sticky="ew", padx=2, pady=2)
+Label(workers_frame, text="Save", width=10, padx=2, pady=2).grid(row=0, column=8, sticky="ew", padx=2, pady=2)
+Label(workers_frame, text="Assign Manual", width=10, padx=2, pady=2).grid(row=0, column=9, sticky="ew", padx=2, pady=2)
+Label(workers_frame, text="Delete", width=10, padx=2, pady=2).grid(row=0, column=10, sticky="ew", padx=2, pady=2)
 
 # List to hold worker rows (for delete).
 worker_rows = []  # Empty list to store widget references for each row.
@@ -424,21 +442,25 @@ def add_worker_row():  # Function for "Add Worker" button.
     max_24hr_entry = Entry(workers_frame, width=10)
     max_24hr_entry.grid(row=row_num, column=5, sticky="ew", padx=2, pady=2)
 
-    # Column 6: Manual shifts button.
+    # Column 6: Prefer_unit_button.
+    prefer_unit_button = Button(workers_frame, text="Select", width=10, command=lambda: show_prefer_unit_popup(row_num))
+    prefer_unit_button.grid(row=row_num, column=6, sticky="ew", padx=2, pady=2)
+
+    # Column 7: Manual shifts button.
     manual_button = Button(workers_frame, text="Select", width=10, command=lambda: show_manual_popup(row_num))
-    manual_button.grid(row=row_num, column=6, sticky="ew", padx=2, pady=2)
+    manual_button.grid(row=row_num, column=7, sticky="ew", padx=2, pady=2)
 
-    # Column 7: Save Worker button.
+    # Column 8: Save Worker button.
     save_button = Button(workers_frame, text="Save", width=10, command=lambda: save_worker(row_num))
-    save_button.grid(row=row_num, column=7, sticky="ew", padx=2, pady=2)
+    save_button.grid(row=row_num, column=8, sticky="ew", padx=2, pady=2)
 
-    # Column 8: Manual save button.
+    # Column 9: Manual save button.
     manual_save_button = Button(workers_frame, text="Assign", width=10, command=lambda: save_manual(row_num))
-    manual_save_button.grid(row=row_num, column=8, sticky="ew", padx=2, pady=2)
+    manual_save_button.grid(row=row_num, column=9, sticky="ew", padx=2, pady=2)
 
-    # Column 9: Delete button.
+    # Column 10: Delete button.
     delete_button = Button(workers_frame, text="Delete", width=10, command=lambda: delete_row(row_num))
-    delete_button.grid(row=row_num, column=9, sticky="ew", padx=2, pady=2)
+    delete_button.grid(row=row_num, column=10, sticky="ew", padx=2, pady=2)
 
     # Store all widgets for this row for deletion purposes
     row_widgets = {
@@ -448,6 +470,7 @@ def add_worker_row():  # Function for "Add Worker" button.
         'prefer_button': prefer_button,
         'max_weekends_entry': max_weekends_entry,
         'max_24hr_entry': max_24hr_entry,
+        'prefer_unit_button': prefer_unit_button,
         'manual_button': manual_button,
         'save_button': save_button,
         'manual_save_button': manual_save_button,
@@ -507,8 +530,8 @@ def add_worker_row():  # Function for "Add Worker" button.
         # Cannot work from selected days.
         global selected_cannot_days
         cannot_work = selected_cannot_days.get(row_num, [])  # Get the list for this row_num.
-
         prefer = selected_prefer_days.get(row_num, [])  # Get the list for this row_num.
+        prefer_units = selected_units.get(row_num, []) # Get the list for this row_num for prefer_units
 
         # Max weekends and 24hr – numbers.
         max_weekends = 100  # Default 100.
@@ -547,6 +570,7 @@ def add_worker_row():  # Function for "Add Worker" button.
             existing_worker["shifts_to_fill"] = [min_shifts, max_shifts]
             existing_worker["cannot_work"] = cannot_work
             existing_worker["prefers"] = prefer
+            existing_worker["prefer_units"] = prefer_units
             existing_worker["max_weekends"] = max_weekends
             existing_worker["max_24hr"] = max_24hr
             # Check if there were manually selected shifts
@@ -562,6 +586,7 @@ def add_worker_row():  # Function for "Add Worker" button.
                 "shifts_to_fill": [min_shifts, max_shifts],
                 "cannot_work": cannot_work,
                 "prefers": prefer,
+                "prefer_units": prefer_units,
                 "max_weekends": max_weekends,
                 "max_24hr": max_24hr,
                 "worker_row_number": row_num
@@ -572,7 +597,7 @@ def add_worker_row():  # Function for "Add Worker" button.
         # Print for debugging
         print("Your full worker list:")
         for worker in workers_list:
-            print(f"Name: {worker['name']}, shifts: {worker['shifts_to_fill']}, Cannot: {worker['cannot_work']}, Prefers: {worker['prefers']}, Max weekends: {worker['max_weekends']}, Max 24hr: {worker['max_24hr']}, Row number: {worker['worker_row_number']}")
+            print(f"Name: {worker['name']}, shifts: {worker['shifts_to_fill']}, Cannot: {worker['cannot_work']}, Prefers: {worker['prefers']}, Max weekends: {worker['max_weekends']}, Max 24hr: {worker['max_24hr']}, Prefers units: {worker['prefer_units']} Row number: {worker['worker_row_number']}")
 
     def save_manual(row_num):
         # Get worker name
@@ -655,6 +680,8 @@ def delete_row(row_num):
         del selected_cannot_days[row_num]
     if row_num in selected_prefer_days:
         del selected_prefer_days[row_num]
+    if row_num in selected_units:
+        del selected_units[row_num]
     if row_num in selected_manual_days:
         del selected_manual_days[row_num]
 
@@ -752,6 +779,7 @@ def save_preferences():
         # This is like throwing away notes from empty tables
         cleaned_cannot = {row_num: days for row_num, days in selected_cannot_days.items() if row_num in saved_row_numbers}
         cleaned_prefer = {row_num: days for row_num, days in selected_prefer_days.items() if row_num in saved_row_numbers}
+        cleaned_selected_units = {row_num: days for row_num, days in selected_units.items() if row_num in saved_row_numbers}
         cleaned_manual = {row_num: days for row_num, days in selected_manual_days.items() if row_num in saved_row_numbers}
         
         # Build the data to save (using cleaned versions)
@@ -763,14 +791,16 @@ def save_preferences():
         data["workers_list"] = workers_list
         data["selected_cannot_days"] = cleaned_cannot  # Use cleaned version
         data["selected_prefer_days"] = cleaned_prefer  # Use cleaned version
+        data["selected_units"] = cleaned_selected_units
         data["selected_manual_days"] = cleaned_manual  # Use cleaned version
+        data["units_list"] = units_list  # Save units_list
         
         with open(file_path, 'w') as f:
             json.dump(data, f)
         error_label.config(text="Preferences saved.")
 
 def load_preferences():
-    global selected_cannot_days, selected_prefer_days, selected_manual_days
+    global selected_cannot_days, selected_prefer_days, selected_manual_days, selected_units
     file_path = filedialog.askopenfilename(filetypes=[("JSON files", "*.json"), ("All files", "*.*")])
     if file_path:
         with open(file_path, 'r') as f:
@@ -797,7 +827,19 @@ def load_preferences():
             holiday_entry.delete(0, END)
             if holiday_days:
                 holiday_entry.insert(0, ", ".join(map(str, holiday_days)))
-            holidays_label.config(text="Holiday List: " + str(holiday_days))
+                holidays_label.config(text="Holiday List: " + str(holiday_days))
+            else:
+                holidays_label.config(text="Holiday List: None")
+        if "units_list" in data:
+            global units_list
+            units_list = data["units_list"]
+            nice_units_text = ", ".join(units_list)
+            units_entry.delete(0, END)
+            if units_list:
+                units_entry.insert(0, nice_units_text)
+                current_units_label.config(text=f"Current Units: {', '.join(units_list)}")
+            else:
+                current_units_label.config(text="Current Units: None")
         if "shifts_list" in data:
             global shifts_list
             shifts_list = data["shifts_list"]
@@ -844,6 +886,8 @@ def load_preferences():
             selected_cannot_days = {int(k): v for k, v in data["selected_cannot_days"].items()}
         if "selected_prefer_days" in data:
             selected_prefer_days = {int(k): v for k, v in data["selected_prefer_days"].items()}
+        if "selected_units" in data:
+            selected_units = {int(k): v for k, v in data["selected_units"].items()}
         if "selected_manual_days" in data:
             selected_manual_days = {int(k): v for k, v in data["selected_manual_days"].items()}
         # Set worker dicts from loaded selected dicts to ensure consistency
@@ -851,6 +895,7 @@ def load_preferences():
             row_num = worker["worker_row_number"]
             worker["cannot_work"] = selected_cannot_days.get(row_num, [])
             worker["prefers"] = selected_prefer_days.get(row_num, [])
+            worker["prefer_units"] = selected_units.get(row_num, [])
             if row_num not in selected_manual_days:
                 selected_manual_days[row_num] = []
         error_label.config(text="Preferences loaded.")
@@ -861,6 +906,8 @@ def load_preferences():
             row_widgets['cannot_button'].config(text=f"Select ({num_cannot})" if num_cannot > 0 else "Select")
             num_prefer = len(selected_prefer_days.get(row_num, []))
             row_widgets['prefer_button'].config(text=f"Select ({num_prefer})" if num_prefer > 0 else "Select")
+            num_prefer_unit = len(selected_units.get(row_num, []))
+            row_widgets['prefer_unit_button'].config(text=f"Select ({num_prefer_unit})" if num_prefer_unit > 0 else "Select")
             num_manual = len(selected_manual_days.get(row_num, []))
             row_widgets['manual_button'].config(text=f"Select ({num_manual})" if num_manual > 0 else "Select")
     print(f"Debugging. Year: {year}, month {month}, Holiday list: {holiday_days}, Shift list length {len(shifts_list)}")
