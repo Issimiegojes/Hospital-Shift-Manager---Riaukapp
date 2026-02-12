@@ -392,23 +392,26 @@ def manual_count(manual_popup_inputs):
 
     # Pre-select checkboxes based on existing selections for this row_num
     existing_selections = selected_manual_days.get(row_num, [])
+    unit_var = StringVar(value=units_list[0] if units_list else "")  # Default to first unit or empty
     for unit in units_list: # Go through all units to find the shifts like "Day 5 Cardiology"
         for shift_name, var in check_vars: # Go through shift_name(s) in check_vars like "Day 5"
             shift_full_name = f"{shift_name} {unit}" # Set shift_name with unit "Day 5 Cardiology"
             if shift_full_name in existing_selections: # If "Day 5 Cardiology" is in existing_selections, var.set(1) for "Day 5"
                 var.set(1)
+                # Set the OptionMenu to show the unit
+                unit_var.set(unit)
 
     # Calculate the row number for "Check All" row
     # It should be after all the days, so: len(days_list) + 1
     check_all_row = len(days_list) + 1
-    
+
     # Create the "Check All" label in column 1
     Label(scrollable_frame, text="Check All").grid(row=check_all_row, column=1, sticky="w")
-    
+
     # Create master checkbox variables for day and night
     master_day_var = IntVar()  # Variable for "Check All Day Shifts"
     master_night_var = IntVar()  # Variable for "Check All Night Shifts"
-    
+
     # Function that runs when "Check All Day Shifts" is clicked
     def toggle_all_day_shifts():
         # Get the value: 1 if checked, 0 if unchecked
@@ -416,7 +419,7 @@ def manual_count(manual_popup_inputs):
         # Loop through ALL day shift checkboxes and set them to the same value
         for day_var in day_shift_vars:
             day_var.set(value)  # Set each one to 1 (checked) or 0 (unchecked)
-    
+
     # Function that runs when "Check All Night Shifts" is clicked
     def toggle_all_night_shifts():
         # Get the value: 1 if checked, 0 if unchecked
@@ -424,19 +427,17 @@ def manual_count(manual_popup_inputs):
         # Loop through ALL night shift checkboxes and set them to the same value
         for night_var in night_shift_vars:
             night_var.set(value)  # Set each one to 1 (checked) or 0 (unchecked)
-    
+
     # Create the "Check All" checkboxes with the command parameter
     # command= tells the checkbox what function to run when clicked
-    Checkbutton(scrollable_frame, variable=master_day_var, 
+    Checkbutton(scrollable_frame, variable=master_day_var,
                 command=toggle_all_day_shifts).grid(row=check_all_row, column=2)
-    Checkbutton(scrollable_frame, variable=master_night_var, 
+    Checkbutton(scrollable_frame, variable=master_night_var,
                 command=toggle_all_night_shifts).grid(row=check_all_row, column=3)
 
-    # Hospital Unit Checks    
+    # Hospital Unit Checks
 
     Label(scrollable_frame, text="Hospital Unit").grid(row=check_all_row+1, column=1, sticky="w")
-    for unit in units_list:
-        unit_var = StringVar(value=unit)
     OptionMenu(scrollable_frame, unit_var, *units_list).grid(row=check_all_row+1, column=2, columnspan=2) # sticky="w"
     
     def save_selection():
