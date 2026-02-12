@@ -26,6 +26,7 @@ month = None
 holiday_days = [] # Empty variable, so "Make shifts" works even if Holidays saved nothing
 shifts_list = []
 workers_list = []
+units_list = [] # Empty list to store units: "Cardiology", "Internal Medicine - Endocrinology" etc.
 selected_cannot_days = {}  # Changed to dict to store per row_num
 selected_prefer_days = {}  # Dict to store preferred days per row_num
 selected_manual_days = {}  # Dict to store manual days per row_num
@@ -123,6 +124,39 @@ Button(month_frame, text="Save", command=save_month).pack(side=LEFT)  # Button, 
 current_month_label = Label(month_frame, text="Current Month: None")
 current_month_label.pack(side=LEFT)
 
+Label(root, text="Units (comma-separated, e.g. Internal Medicine,Cardiology):").pack()
+
+units_frame = Frame(root, borderwidth=2, relief="groove")
+units_frame.pack()
+
+units_entry = Entry(units_frame, width=40)
+units_entry.pack(side=LEFT)
+
+def save_units():
+    global units_list
+    units_input = units_entry.get().strip()
+    if units_input == "":
+        units_list = []
+        current_units_label.config(text="Current Units: None")
+        error_label.config(text="")
+        return
+    
+    # Split by comma and clean up whitespace
+    units_list = [u.strip() for u in units_input.split(",") if u.strip()]
+    
+    if not units_list:
+        current_units_label.config(text="Current Units: None")
+        error_label.config(text="Please enter at least one unit.")
+        return
+    
+    current_units_label.config(text=f"Current Units: {', '.join(units_list)}")
+    error_label.config(text=f"{len(units_list)} unit(s) saved.")
+
+Button(units_frame, text="Save", command=save_units).pack(side=LEFT)
+
+current_units_label = Label(units_frame, text="Current Units: None")
+current_units_label.pack(side=LEFT)
+
 # =======================================
 # Popup functions, found in separate file
 # =======================================
@@ -168,7 +202,7 @@ def show_cannot_popup(row_num):
         "give_worker_rows": worker_rows,
         "give_row_num": row_num,
         "give_selected_cannot_days": selected_cannot_days,   
-        "give_error_label": error_label,                     
+        "give_error_label": error_label,                
     }
 
     cannot_count(cannot_popup_inputs)
@@ -182,7 +216,8 @@ def show_manual_popup(row_num):
         "give_worker_rows": worker_rows,
         "give_row_num": row_num,
         "give_selected_manual_days": selected_manual_days,   
-        "give_error_label": error_label,    
+        "give_error_label": error_label,
+        "give_units_list": units_list,    
     }
     
     manual_count(manual_popup_inputs)
@@ -286,34 +321,50 @@ worker_canvas.bind("<Configure>", update_inner_width)  # Run this when canvas si
 worker_inner_frame.bind("<Configure>", update_scroll_region)  # Run this function when inner frame changes size
 
 def make_shifts():  # New function for making shifts list.
-    global shifts_list, holiday_days, include_weekday_days  # Use the shifts_list box outside.
+    global shifts_list, holiday_days, include_weekday_days, units_list  # Use the shifts_list box outside.
+
+    if year == None or month == None:
+        error_label.config(text="Erorr: Please select year and month first!")
+        return
+
+    # Check if units are defined
+    if not units_list:
+        error_label.config(text="Error: Please define units first!")
+        return
+
     shifts_list = []  # Empty list for shifts.
     shift_types = ["Day", "Night"]  # Group of types.
     day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]  # Group of day names.
-    for day in days_list:  # Loop each day.
-        weekday = (starting_weekday + (day - 1)) % 7  # Calculate day name ( %7 like clock wrap).
-        tags = [day_names[weekday]]  # Add day name tag.
-        if weekday in [5, 6]:  # Sat/Sun – weekend.
-            tags.append("Weekend")  # Add tag.
-        if day in holiday_days:  # If holiday.
-            tags.append("Public holiday")  # Add tag.
-        for shift_type in shift_types:  # Loop Day then Night.
-            # Check if this is a Monday-Friday Day shift (and not a holiday) – if both true, exclude (skip)
-            if (not include_weekday_days) and weekday in [0, 1, 2, 3, 4] and shift_type == "Day" and day not in holiday_days:
-                continue  # Skip Mon-Fri day shifts only when the checkbox is OFF
-            shift_name = f"{shift_type} {day}"  # Make name.
-            shift_dict = {  # Make the shift box.
-                "name": shift_name,
-                "type": shift_type,
-                "tags": tags,
-                "assigned_worker": None
-            }
-            shifts_list.append(shift_dict)  # Add to list.
-    error_label.config(text="Shifts made: " + str(len(shifts_list)))  # Update the label with count.
-    # Show the shifts list nicely in terminal, for debugging
-    print("Your shifts list (with tags, types):")
-    for shift in shifts_list:  # Loop to print each one.
-        print(f"Shift: {shift['name']}, Tags: {shift['tags']}, Type: {shift['type']}, Assigned: {shift['assigned_worker']}")
+    
+    # Loop through each unit
+    for unit in units_list:
+        for day in days_list:  # Loop each day.
+            weekday = (starting_weekday + (day - 1)) % 7  # Calculate day name ( %7 like clock wrap).
+            tags = [day_names[weekday]]  # Add day name tag.
+            if weekday in [5, 6]:  # Sat/Sun – weekend.
+                tags.append("Weekend")  # Add tag.
+            if day in holiday_days:  # If holiday.
+                tags.append("Public holiday")  # Add tag.
+            for shift_type in shift_types:  # Loop Day then Night.
+                # Check if this is a Monday-Friday Day shift (and not a holiday) – if both true, exclude (skip)
+                if (not include_weekday_days) and weekday in [0, 1, 2, 3, 4] and shift_type == "Day" and day not in holiday_days:
+                    continue  # Skip Mon-Fri day shifts only when the checkbox is OFF
+                shift_name = f"{shift_type} {day} {unit}"  # Make name: ex. Cardiology Day 1, Internal Medicine Night 2...
+                shift_dict = {  # Make the shift box.
+                    "name": shift_name,
+                    "type": shift_type,
+                    "tags": tags,
+                    "unit": unit,
+                    "assigned_worker": None
+                }
+                shifts_list.append(shift_dict)  # Add to list.
+        
+        error_label.config(text=f"Shifts made: {len(shifts_list)} across {len(units_list)} unit(s)") # Update the label with count.
+        
+        # Show the shifts list nicely in terminal, for debugging
+        print("Your shifts list (with tags, types):")
+        for shift in shifts_list:  # Loop to print each one.
+            print(f"Shift: {shift['name']}, Tags: {shift['tags']}, Type: {shift['type']}, Assigned: {shift['assigned_worker']}")
 
 Button(make_shifts_button_frame, text="Make Shifts", command=make_shifts, width=10).pack()  # Button, click runs make_shifts.
 
@@ -968,7 +1019,7 @@ def load_xlsx_preferences():
             # Create the worker dictionary with default values
             worker_dict = {
                 "name": name,
-                "shifts_to_fill": [0, 100],  # Default: 0 min, 100 max
+                "shifts_to_fill": [1, 4],  # Default: 0 min, 100 max
                 "cannot_work": cannot_list,
                 "prefers": prefer_list,
                 "max_weekends": 100,
@@ -996,7 +1047,7 @@ def load_xlsx_preferences():
                     
                     # Fill shift range (default 0-100)
                     row_widgets['range_entry'].delete(0, END)
-                    row_widgets['range_entry'].insert(0, "0-100")
+                    row_widgets['range_entry'].insert(0, "1-4")
                     
                     # Fill max weekends
                     row_widgets['max_weekends_entry'].delete(0, END)
@@ -1083,6 +1134,22 @@ def is_green_color(color_hex):
     except (ValueError, IndexError):
         return False
 
+def extract_day_from_shift_name(shift_name):
+    """
+    Extract day number from shift name.
+    Examples: "Day 5 Cardiology" -> 5, "Night 12 Internal Medicine" -> 12
+    """
+    parts = shift_name.split()
+    return int(parts[1])  # Day number is always the second part
+
+def extract_unit_from_shift_name(shift_name):
+    """
+    Extract unit name from shift name.
+    Examples: "Day 5 Cardiology" -> "Cardiology"
+    """
+    parts = shift_name.split()
+    return " ".join(parts[2:])  # Everything after day number is the unit
+
 # ----------------------------------------------------------------------------
 # PuLP Solve: solver is in separate file
 # ----------------------------------------------------------------------------
@@ -1120,7 +1187,7 @@ def create_rota():
     # We send our data to solver.py and get the results back
     
     # The imported create_rota function from solver.py
-    assignments, summary = solve_rota(shifts_list, workers_list, settings)
+    assignments, summary = solve_rota(shifts_list, workers_list, units_list, settings)
     
     # ========================================================================
     # PART C: Update the shifts_list with the new assignments
@@ -1172,40 +1239,60 @@ def create_rota():
     text_widget.bind("<MouseWheel>", on_popup_mousewheel)
     
     # Add title
-    text_widget.insert("end", "Final Rota:\n", "title")
-    text_widget.insert("end", "=" * 60 + "\n\n", "separator")
+    text_widget.insert("end", "Final Rota (Multi-Unit)\n", "title")
+    text_widget.insert("end", "=" * 70 + "\n\n", "separator")
     
-    # Add column headers
-    text_widget.insert("end", f"{'Day':<7}{'Day Shift':<25}{'Night Shift':<15}\n", "header")
-    text_widget.insert("end", "-" * 60 + "\n", "separator")
+    # Group assignments by unit
+    assignments_by_unit = {}
+    for shift_name, worker in assignments.items():
+        if worker is None:
+            worker = "Unassigned"
+        
+        # Extract unit from shift name
+        unit = extract_unit_from_shift_name(shift_name)
+        
+        if unit not in assignments_by_unit:
+            assignments_by_unit[unit] = {}
+        
+        # Extract day number and type
+        day = extract_day_from_shift_name(shift_name)
+        shift_type = shift_name.split()[0]  # "Day" or "Night"
+        
+        if day not in assignments_by_unit[unit]:
+            assignments_by_unit[unit][day] = {"Day": "No shift", "Night": "No shift"}
+        
+        assignments_by_unit[unit][day][shift_type] = worker
     
-    # Add each day's assignments
-    for day in days_list:
-        day_shift = f"Day {day}"
-        night_shift = f"Night {day}"
-        day_worker = assignments.get(day_shift, "No shift")
-        night_worker = assignments.get(night_shift, "No shift")
+    # Display results grouped by unit
+    for unit in sorted(assignments_by_unit.keys()):
+        text_widget.insert("end", f"=== {unit} ===\n", "unit_header")
+        text_widget.insert("end", "-" * 70 + "\n", "separator")
+        text_widget.insert("end", f"{'Day':<7}{'Day Shift':<30}{'Night Shift':<30}\n", "header")
+        text_widget.insert("end", "-" * 70 + "\n", "separator")
         
-        day_text = str(day)
-        day_worker_text = day_worker if day_worker else "Unassigned"
-        night_worker_text = night_worker if night_worker else "Unassigned"
+        for day in sorted(assignments_by_unit[unit].keys()):
+            day_worker = assignments_by_unit[unit][day].get("Day", "No shift")
+            night_worker = assignments_by_unit[unit][day].get("Night", "No shift")
+            
+            text_widget.insert("end", f"{day:<7}{day_worker:<30}{night_worker:<30}\n")
         
-        text_widget.insert("end", f"{day_text:<5}{day_worker_text:<15}{night_worker_text:<15}\n")
+        text_widget.insert("end", "\n")
     
     # Add summary section
-    text_widget.insert("end", "\n" + "=" * 60 + "\n", "separator")
+    text_widget.insert("end", "=" * 70 + "\n", "separator")
     text_widget.insert("end", "Summary:\n", "title")
-    text_widget.insert("end", "-" * 60 + "\n", "separator")
+    text_widget.insert("end", "-" * 70 + "\n", "separator")
     text_widget.insert("end", f"Number of preferred shifts assigned: {summary['preferences_count']}\n")
     text_widget.insert("end", f"Number of 24-hour shifts: {summary['twenty_four_count']}\n")
     text_widget.insert("end", f"Number of bad spacing pairs (<{spacing_days_threshold} days apart): {summary['bad_spacing_count']}\n")
     
     # Style the text
     text_widget.tag_config("title", font=("Arial", 12, "bold"))
+    text_widget.tag_config("unit_header", font=("Arial", 11, "bold"), foreground="blue")
     text_widget.tag_config("header", font=("Arial", 10, "bold"))
     text_widget.tag_config("separator", foreground="gray")
     
-    # Make it read-only (but still copyable)
+    # Make read-only
     text_widget.config(state="disabled")
 
 # ---------------------------------------------------------------
