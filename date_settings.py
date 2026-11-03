@@ -60,7 +60,7 @@ def save_month_confirm(save_month_inputs):  # Function for the button.
     # Show the details.
     day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]  # Group of day names.
     # Show the month name and days_list in GUI.
-    month_name_list = ["January", "February", "March", "April", "May", "June", "July", "September", "August", "October", "November", "December"]
+    month_name_list = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
     month_name = month_name_list[month-1]
     current_month_label.config(text="Current Month: " + str(month_name)) # Update month
     error_label.config(text=f"{month_name} has {len(days_list)} days, start of the weekday: {day_names[starting_weekday]}")  # Update result.
